@@ -1,30 +1,62 @@
-name: High Speed SSH to GitHub
+name: Cloudflare SSH Tunnel (Bản Chuẩn)
 on: workflow_dispatch
 
 jobs:
-  ssh-fast:
+  ssh-tunnel:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup SSH Server
+      - name: 1. Mở khóa và Cài mật khẩu SSH
         run: |
-          # Thiết lập mật khẩu cho user runner (Thay '123456' bằng pass của ông)
-          echo "runner:123456" | sudo chpasswd
-          sudo systemctl start ssh
-
-      - name: Install Cloudflared & Open Tunnel
+          # Cài mật khẩu cho user mặc định của GitHub là 'runner'
+          echo "runner:geminivip" | sudo chpasswd
+          
+          # Bật tính năng đăng nhập bằng Mật khẩu (GitHub mặc định tắt cái này)
+          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config || true
+          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config || true
+          sudo systemctl restart sshd || sudo systemctl restart ssh
+          
+      - name: 2. Cài đặt Cloudflared
         run: |
-          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared-linux-amd64.deb
           
-          # Chạy tunnel và lấy URL
-          nohup cloudflared tunnel --url tcp://localhost:22 > cf.log 2>&1 &
+      - name: 3. Khởi chạy Tunnel và Bắt Link
+        run: |
+          # Chạy tunnel ngầm
+          nohup cloudflared tunnel --url tcp://localhost:22 > tunnel.log 2>&1 &
           
-          echo "Đợi 5 giây để lấy link..."
-          sleep 5
-          echo "--------------------------------------------------------"
-          grep -oE "https://[a-zA-Z0-9-]+\.trycloudflare\.com" cf.log | sed 's/https:\/\//Địa chỉ SSH của ông: /'
-          echo "--------------------------------------------------------"
+          echo "Đang đào hầm Cloudflare... (Tối đa 30s)"
           
-          # Giữ job chạy trong 6 tiếng để ông quậy
+          # Vòng lặp check log: Cứ 2s check 1 lần, có link là lôi ra luôn
+          for i in {1..15}; do
+            if grep -q "trycloudflare.com" tunnel.log; then
+              break
+            fi
+            sleep 2
+          done
+          
+          echo "====================================================================="
+          echo "🔥 THÔNG TIN ĐĂNG NHẬP CỦA ÔNG ĐÂY:"
+          echo "Tài khoản : runner"
+          echo "Mật khẩu  : geminivip"
+          echo " "
+          
+          # Trích xuất đúng cái tên miền
+          CF_URL=$(grep -oE "[a-zA-Z0-9-]+\.trycloudflare\.com" tunnel.log | head -n 1)
+          
+          if [ -z "$CF_URL" ]; then
+            echo "❌ LỖI: Căng rồi, Cloudflare không nhả link. Log gốc đây ông soi thử:"
+            cat tunnel.log
+          else
+            echo "✅ LẤY LINK THÀNH CÔNG: $CF_URL"
+            echo " "
+            echo "👉 LỆNH ĐỂ ÔNG PASTE VÀO TERMINAL MÁY NHÀ:"
+            echo "ssh runner@$CF_URL -o ProxyCommand=\"cloudflared access tcp --hostname %h\""
+          fi
+          echo "====================================================================="
+          
+      - name: 4. Giữ Job sống (Treo 6 tiếng)
+        run: |
+          echo "Máy ảo đang treo để ông vào vọc vạch. Sau 6h sẽ tự hủy..."
           sleep 21600
           
