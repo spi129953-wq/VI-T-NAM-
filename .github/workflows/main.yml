@@ -1,0 +1,30 @@
+name: High Speed SSH to GitHub
+on: workflow_dispatch
+
+jobs:
+  ssh-fast:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH Server
+        run: |
+          # Thiết lập mật khẩu cho user runner (Thay '123456' bằng pass của ông)
+          echo "runner:123456" | sudo chpasswd
+          sudo systemctl start ssh
+
+      - name: Install Cloudflared & Open Tunnel
+        run: |
+          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
+          
+          # Chạy tunnel và lấy URL
+          nohup cloudflared tunnel --url tcp://localhost:22 > cf.log 2>&1 &
+          
+          echo "Đợi 5 giây để lấy link..."
+          sleep 5
+          echo "--------------------------------------------------------"
+          grep -oE "https://[a-zA-Z0-9-]+\.trycloudflare\.com" cf.log | sed 's/https:\/\//Địa chỉ SSH của ông: /'
+          echo "--------------------------------------------------------"
+          
+          # Giữ job chạy trong 6 tiếng để ông quậy
+          sleep 21600
+          
