@@ -1,62 +1,41 @@
-name: Cloudflare SSH Tunnel (Bản Chuẩn)
-on: workflow_dispatch
+name: SSH via Ngrok
+
+on:
+  workflow_dispatch:
 
 jobs:
-  ssh-tunnel:
+  ssh:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Mở khóa và Cài mật khẩu SSH
+      - name: Install dependencies
         run: |
-          # Cài mật khẩu cho user mặc định của GitHub là 'runner'
-          echo "runner:geminivip" | sudo chpasswd
-          
-          # Bật tính năng đăng nhập bằng Mật khẩu (GitHub mặc định tắt cái này)
-          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/g' /etc/ssh/sshd_config || true
-          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config || true
-          sudo systemctl restart sshd || sudo systemctl restart ssh
-          
-      - name: 2. Cài đặt Cloudflared
+          sudo apt update
+          sudo apt install -y openssh-server wget unzip
+
+      - name: Setup SSH
         run: |
-          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared-linux-amd64.deb
-          
-      - name: 3. Khởi chạy Tunnel và Bắt Link
+          sudo useradd -m runner || true
+          echo "runner:123456" | sudo chpasswd
+          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+
+      - name: Install ngrok
         run: |
-          # Chạy tunnel ngầm
-          nohup cloudflared tunnel --url tcp://localhost:22 > tunnel.log 2>&1 &
-          
-          echo "Đang đào hầm Cloudflare... (Tối đa 30s)"
-          
-          # Vòng lặp check log: Cứ 2s check 1 lần, có link là lôi ra luôn
-          for i in {1..15}; do
-            if grep -q "trycloudflare.com" tunnel.log; then
-              break
-            fi
-            sleep 2
-          done
-          
-          echo "====================================================================="
-          echo "🔥 THÔNG TIN ĐĂNG NHẬP CỦA ÔNG ĐÂY:"
-          echo "Tài khoản : runner"
-          echo "Mật khẩu  : geminivip"
-          echo " "
-          
-          # Trích xuất đúng cái tên miền
-          CF_URL=$(grep -oE "[a-zA-Z0-9-]+\.trycloudflare\.com" tunnel.log | head -n 1)
-          
-          if [ -z "$CF_URL" ]; then
-            echo "❌ LỖI: Căng rồi, Cloudflare không nhả link. Log gốc đây ông soi thử:"
-            cat tunnel.log
-          else
-            echo "✅ LẤY LINK THÀNH CÔNG: $CF_URL"
-            echo " "
-            echo "👉 LỆNH ĐỂ ÔNG PASTE VÀO TERMINAL MÁY NHÀ:"
-            echo "ssh runner@$CF_URL -o ProxyCommand=\"cloudflared access tcp --hostname %h\""
-          fi
-          echo "====================================================================="
-          
-      - name: 4. Giữ Job sống (Treo 6 tiếng)
+          wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+          tar -xzf ngrok-v3-stable-linux-amd64.tgz
+          sudo mv ngrok /usr/local/bin/
+
+      - name: Configure ngrok
         run: |
-          echo "Máy ảo đang treo để ông vào vọc vạch. Sau 6h sẽ tự hủy..."
-          sleep 21600
-          
+          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+      - name: Start SSH tunnel
+        run: |
+          ngrok tcp 22 --region ap --log=stdout &
+          sleep 1
+
+      - name: Keep alive
+        run: |
+          echo "SSH READY"
+          sleep 6h
