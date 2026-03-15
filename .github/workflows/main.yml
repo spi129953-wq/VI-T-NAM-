@@ -1,4 +1,4 @@
-name: SSH via Cloudflare Tunnel
+name: SSH via Pinggy
 
 on:
   workflow_dispatch:
@@ -8,34 +8,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install packages
+      - name: Install SSH server
         run: |
           sudo apt update
-          sudo apt install -y openssh-server curl wget
+          sudo apt install -y openssh-server curl
 
-      - name: Setup SSH server
+      - name: Setup SSH user
         run: |
           sudo useradd -m runner || true
           echo "runner:123456" | sudo chpasswd
           sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
           sudo systemctl restart ssh
 
-      - name: Install cloudflared
+      - name: Start Pinggy Tunnel
         run: |
-          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          chmod +x cloudflared-linux-amd64
-          sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
-
-      - name: Start Cloudflare Tunnel
-        run: |
-          cloudflared tunnel --url ssh://localhost:22 --protocol quic > tunnel.log 2>&1 &
-          sleep 8
-          echo "====== Tunnel URL ======"
-          cat tunnel.log
-          echo "========================"
+          echo "Starting Pinggy tunnel..."
+          ssh -p 443 -o StrictHostKeyChecking=no -R0:localhost:22 a.pinggy.io > pinggy.log 2>&1 &
+          sleep 10
+          echo "====== SSH ADDRESS ======"
+          cat pinggy.log
+          echo "========================="
 
       - name: Keep runner alive
         run: |
-          echo "SSH USER: runner"
-          echo "SSH PASS: 123456"
+          echo "USER: runner"
+          echo "PASS: 123456"
           sleep 6h
