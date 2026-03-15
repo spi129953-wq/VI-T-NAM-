@@ -13,24 +13,35 @@ jobs:
           sudo apt update
           sudo apt install -y openssh-server curl
 
-      - name: Setup SSH user
+      - name: Setup SSH
         run: |
           sudo useradd -m runner || true
           echo "runner:123456" | sudo chpasswd
           sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
           sudo systemctl restart ssh
 
       - name: Start Pinggy Tunnel
         run: |
-          echo "Starting Pinggy tunnel..."
-          ssh -p 443 -o StrictHostKeyChecking=no -R0:localhost:22 a.pinggy.io > pinggy.log 2>&1 &
-          sleep 10
-          echo "====== SSH ADDRESS ======"
+          echo "Starting Pinggy SSH tunnel..."
+          ssh -p 443 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R0:localhost:22 a.pinggy.io > pinggy.log 2>&1 &
+          sleep 20
+          echo "========== PINGGY LOG =========="
           cat pinggy.log
-          echo "========================="
+          echo "================================"
+
+      - name: Show SSH info
+        run: |
+          PORT=$(grep -oP 'Allocated port \K[0-9]+' pinggy.log || true)
+          echo "--------------------------------"
+          echo "SSH USER: runner"
+          echo "SSH PASS: 123456"
+          echo ""
+          echo "SSH COMMAND:"
+          echo "ssh runner@a.pinggy.io -p $PORT"
+          echo "--------------------------------"
 
       - name: Keep runner alive
         run: |
-          echo "USER: runner"
-          echo "PASS: 123456"
+          echo "Runner will stay alive for 6 hours"
           sleep 6h
