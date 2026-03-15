@@ -1,4 +1,4 @@
-name: SSH via Ngrok
+name: SSH via Cloudflare Tunnel
 
 on:
   workflow_dispatch:
@@ -6,36 +6,36 @@ on:
 jobs:
   ssh:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Install dependencies
+      - name: Install packages
         run: |
           sudo apt update
-          sudo apt install -y openssh-server wget unzip
+          sudo apt install -y openssh-server curl wget
 
-      - name: Setup SSH
+      - name: Setup SSH server
         run: |
           sudo useradd -m runner || true
           echo "runner:123456" | sudo chpasswd
           sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sudo sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
           sudo systemctl restart ssh
 
-      - name: Install ngrok
+      - name: Install cloudflared
         run: |
-          wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
-          tar -xzf ngrok-v3-stable-linux-amd64.tgz
-          sudo mv ngrok /usr/local/bin/
+          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared-linux-amd64
+          sudo mv cloudflared-linux-amd64 /usr/local/bin/cloudflared
 
-      - name: Configure ngrok
+      - name: Start Cloudflare Tunnel
         run: |
-          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          cloudflared tunnel --url ssh://localhost:22 --protocol quic > tunnel.log 2>&1 &
+          sleep 8
+          echo "====== Tunnel URL ======"
+          cat tunnel.log
+          echo "========================"
 
-      - name: Start SSH tunnel
+      - name: Keep runner alive
         run: |
-          ngrok tcp 22 --region ap --log=stdout &
-          sleep 1
-
-      - name: Keep alive
-        run: |
-          echo "SSH READY"
+          echo "SSH USER: runner"
+          echo "SSH PASS: 123456"
           sleep 6h
