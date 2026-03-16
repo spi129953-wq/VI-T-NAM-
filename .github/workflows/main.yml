@@ -1,4 +1,4 @@
-name: SSH via fxTunnel
+name: SSH via fxTunnel (Singapore)
 
 on:
   workflow_dispatch:
@@ -25,23 +25,25 @@ jobs:
           sudo systemctl enable ssh
           sudo systemctl restart ssh
 
-      - name: Install fxTunnel
+      - name: Install fxtun
         run: |
-          curl -L https://github.com/FXTunnels/fxtunnel/releases/latest/download/fxtunnel-linux-amd64 -o fxtunnel
-          chmod +x fxtunnel
+          curl -fsSL https://fxtun.dev/install.sh | sh
 
-      - name: Start fxTunnel
+      - name: Login fxTunnel
         run: |
-          ./fxtunnel tcp 22 > fxtunnel.log 2>&1 &
-          sleep 15
+          fxtun login --token ${{ secrets.FXTUN_TOKEN }}
+
+      - name: Start TCP tunnel (Singapore)
+        run: |
+          fxtun tcp 22 --server sg.fxtun.dev > tunnel.log 2>&1 &
+          sleep 12
 
       - name: Extract SSH endpoint
         run: |
-          ENDPOINT=$(grep -oE 'tcp://[^ ]+' fxtunnel.log | head -n1 | sed 's/tcp:\/\///')
+          ENDPOINT=$(grep -oE 'tcp://[^ ]+' tunnel.log | head -n1 | sed 's/tcp:\/\///')
           HOST=$(echo $ENDPOINT | cut -d: -f1)
           PORT=$(echo $ENDPOINT | cut -d: -f2)
 
-          echo ""
           echo "=============================="
           echo "SSH USER: runner"
           echo "SSH PASS: 123456"
@@ -49,15 +51,12 @@ jobs:
           echo "SSH COMMAND:"
           echo "ssh runner@$HOST -p $PORT"
           echo "=============================="
-          echo ""
 
           echo "::notice::SSH => ssh runner@$HOST -p $PORT"
 
-      - name: Show fxTunnel log
+      - name: Show tunnel log
         run: |
-          echo "========== FXTUNNEL LOG =========="
-          cat fxtunnel.log
-          echo "=================================="
+          cat tunnel.log
 
       - name: Keep runner alive
         run: |
