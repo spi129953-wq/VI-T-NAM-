@@ -29,14 +29,13 @@ jobs:
         run: |
           curl -fsSL https://fxtun.dev/install.sh | sh
 
-      - name: Login fxTunnel
-        run: |
-          fxtun login --token ${{ secrets.FXTUN_TOKEN }}
-
       - name: Start TCP tunnel (Singapore)
         run: |
-          fxtun tcp 22 --server sg.fxtun.dev > tunnel.log 2>&1 &
-          sleep 12
+          fxtun tcp 22 \
+            --token ${{ secrets.FXTUN_TOKEN }} \
+            --server sg.fxtun.dev \
+            > tunnel.log 2>&1 &
+          sleep 15
 
       - name: Extract SSH endpoint
         run: |
@@ -44,19 +43,23 @@ jobs:
           HOST=$(echo $ENDPOINT | cut -d: -f1)
           PORT=$(echo $ENDPOINT | cut -d: -f2)
 
-          echo "=============================="
+          echo ""
+          echo "===================================="
           echo "SSH USER: runner"
           echo "SSH PASS: 123456"
           echo ""
           echo "SSH COMMAND:"
           echo "ssh runner@$HOST -p $PORT"
-          echo "=============================="
+          echo "===================================="
+          echo ""
 
           echo "::notice::SSH => ssh runner@$HOST -p $PORT"
 
       - name: Show tunnel log
         run: |
+          echo "========== FXTUNNEL LOG =========="
           cat tunnel.log
+          echo "=================================="
 
       - name: Keep runner alive
         run: |
