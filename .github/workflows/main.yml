@@ -1,4 +1,4 @@
-name: SSH via fxTunnel (Singapore)
+name: SSH via Cloudflare Tunnel
 
 on:
   workflow_dispatch:
@@ -25,23 +25,20 @@ jobs:
           sudo systemctl enable ssh
           sudo systemctl restart ssh
 
-      - name: Install fxtun
+      - name: Install cloudflared
         run: |
-          curl -fsSL https://fxtun.dev/install.sh | sh
+          wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O cloudflared
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
 
-      - name: Start TCP tunnel (Singapore)
+      - name: Start Cloudflare Tunnel
         run: |
-          fxtun tcp 22 \
-            --token ${{ secrets.FXTUN_TOKEN }} \
-            --server sg.fxtun.dev \
-            > tunnel.log 2>&1 &
+          cloudflared tunnel --url ssh://localhost:22 > tunnel.log 2>&1 &
           sleep 15
 
       - name: Extract SSH endpoint
         run: |
-          ENDPOINT=$(grep -oE 'tcp://[^ ]+' tunnel.log | head -n1 | sed 's/tcp:\/\///')
-          HOST=$(echo $ENDPOINT | cut -d: -f1)
-          PORT=$(echo $ENDPOINT | cut -d: -f2)
+          URL=$(grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare.com' tunnel.log | head -n1)
 
           echo ""
           echo "===================================="
@@ -49,17 +46,17 @@ jobs:
           echo "SSH PASS: 123456"
           echo ""
           echo "SSH COMMAND:"
-          echo "ssh runner@$HOST -p $PORT"
+          echo "ssh -o ProxyCommand='cloudflared access ssh --hostname %h' runner@$URL"
           echo "===================================="
           echo ""
 
-          echo "::notice::SSH => ssh runner@$HOST -p $PORT"
+          echo "::notice::SSH => ssh -o ProxyCommand='cloudflared access ssh --hostname %h' runner@$URL"
 
       - name: Show tunnel log
         run: |
-          echo "========== FXTUNNEL LOG =========="
+          echo "========== CLOUDFLARE LOG =========="
           cat tunnel.log
-          echo "=================================="
+          echo "==================================="
 
       - name: Keep runner alive
         run: |
